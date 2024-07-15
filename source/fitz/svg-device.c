@@ -281,6 +281,60 @@ svg_hex_color(fz_context *ctx, fz_colorspace *colorspace, const float *color, fz
 }
 
 static void
+svg_dev_fill_dataset(fz_context *ctx, fz_buffer *out, fz_colorspace *colorspace, const float *color)
+{
+	int type = colorspace->type;
+	unsigned char *lookup;
+	int high;
+	int n;
+	int i, k;
+	if(type == FZ_COLORSPACE_INDEXED)
+	{
+		fz_append_printf(ctx, out, " data-fill-indexed");
+		lookup = colorspace->u.indexed.lookup;
+		high = colorspace->u.indexed.high;
+		n = colorspace->u.indexed.base->n;
+		i = color[0] * 255;
+		i = fz_clampi(i, 0, high);
+		type = colorspace->u.indexed.base->type;
+		fz_append_printf(ctx, out, " data-fill-colorspace=\"%x\"", type);
+		if (type == FZ_COLORSPACE_LAB)
+			fz_append_printf(ctx, out, " data-fill-source=\"[%f,%f,%f]\"", lookup[i * 3 + 0] * 100 / 255.0f, lookup[i * 3 + 1] - 128, lookup[i * 3 + 2] - 128);
+		else
+		{
+			fz_append_printf(ctx, out, " data-fill-source=\"[");
+			for (k = 0; k < n; ++k) {
+				if(k != 0)
+					fz_append_printf(ctx, out, ",");
+				fz_append_printf(ctx, out, "%f", lookup[i * n + k] / 255.0f);
+			}
+			fz_append_printf(ctx, out, "]\"", color[0]);
+		}
+	}
+	else
+	{
+		fz_append_printf(ctx, out, " data-fill-colorspace=\"%x\"", type);
+		switch (type)
+		{
+			case FZ_COLORSPACE_GRAY:
+				fz_append_printf(ctx, out, " data-fill-source=\"[%f]\"", color[0]);
+				break;
+			case FZ_COLORSPACE_RGB:
+			case FZ_COLORSPACE_BGR:
+			case FZ_COLORSPACE_LAB:
+				fz_append_printf(ctx, out, " data-fill-source=\"[%f,%f,%f]\"", color[0], color[1], color[2]);
+				break;
+			case FZ_COLORSPACE_CMYK:
+				fz_append_printf(ctx, out, " data-fill-source=\"[%f,%f,%f,%f]\"", color[0], color[1], color[2], color[3]);
+				break;
+			case FZ_COLORSPACE_SEPARATION:
+				fz_append_printf(ctx, out, " data-fill-source='%q'", colorspace->u.separation.colorant[0]);
+				break;
+		}
+	}
+}
+
+static void
 svg_dev_fill_color(fz_context *ctx, svg_device *sdev, fz_colorspace *colorspace, const float *color, float alpha, fz_color_params color_params)
 {
 	fz_buffer *out = sdev->out;
@@ -289,6 +343,7 @@ svg_dev_fill_color(fz_context *ctx, svg_device *sdev, fz_colorspace *colorspace,
 		int rgb = svg_hex_color(ctx, colorspace, color, color_params);
 		if (rgb != 0) /* black is the default value */
 			fz_append_printf(ctx, out, " fill=\"#%06x\"", rgb);
+		svg_dev_fill_dataset(ctx, out, colorspace, color);
 	}
 	else
 		fz_append_printf(ctx, out, " fill=\"none\"");
@@ -297,11 +352,67 @@ svg_dev_fill_color(fz_context *ctx, svg_device *sdev, fz_colorspace *colorspace,
 }
 
 static void
+svg_dev_stroke_dataset(fz_context *ctx, fz_buffer *out, fz_colorspace *colorspace, const float *color)
+{
+	int type = colorspace->type;
+	unsigned char *lookup;
+	int high;
+	int n;
+	int i, k;
+	if(type == FZ_COLORSPACE_INDEXED)
+	{
+		fz_append_printf(ctx, out, " data-stroke-indexed");
+		lookup = colorspace->u.indexed.lookup;
+		high = colorspace->u.indexed.high;
+		n = colorspace->u.indexed.base->n;
+		i = color[0] * 255;
+		i = fz_clampi(i, 0, high);
+		type = colorspace->u.indexed.base->type;
+		fz_append_printf(ctx, out, " data-stroke-colorspace=\"%x\"", type);
+		if (type == FZ_COLORSPACE_LAB)
+			fz_append_printf(ctx, out, " data-stroke-source=\"[%f,%f,%f]\"", lookup[i * 3 + 0] * 100 / 255.0f, lookup[i * 3 + 1] - 128, lookup[i * 3 + 2] - 128);
+		else
+		{
+			fz_append_printf(ctx, out, " data-stroke-source=\"[");
+			for (k = 0; k < n; ++k) {
+				if(k != 0)
+					fz_append_printf(ctx, out, ",");
+				fz_append_printf(ctx, out, "%f", lookup[i * n + k] / 255.0f);
+			}
+			fz_append_printf(ctx, out, "]\"", color[0]);
+		}
+	}
+	else
+	{
+		fz_append_printf(ctx, out, " data-stroke-colorspace=\"%x\"", type);
+		switch (type)
+		{
+			case FZ_COLORSPACE_GRAY:
+				fz_append_printf(ctx, out, " data-stroke-source=\"[%f]\"", color[0]);
+				break;
+			case FZ_COLORSPACE_RGB:
+			case FZ_COLORSPACE_BGR:
+			case FZ_COLORSPACE_LAB:
+				fz_append_printf(ctx, out, " data-stroke-source=\"[%f,%f,%f]\"", color[0], color[1], color[2]);
+				break;
+			case FZ_COLORSPACE_CMYK:
+				fz_append_printf(ctx, out, " data-stroke-source=\"[%f,%f,%f,%f]\"", color[0], color[1], color[2], color[3]);
+				break;
+			case FZ_COLORSPACE_SEPARATION:
+				fz_append_printf(ctx, out, " data-stroke-source='%q'", colorspace->u.separation.colorant[0]);
+				break;
+		}
+	}
+}
+
+static void
 svg_dev_stroke_color(fz_context *ctx, svg_device *sdev, fz_colorspace *colorspace, const float *color, float alpha, fz_color_params color_params)
 {
 	fz_buffer *out = sdev->out;
-	if (colorspace)
+	if (colorspace) {
 		fz_append_printf(ctx, out, " fill=\"none\" stroke=\"#%06x\"", svg_hex_color(ctx, colorspace, color, color_params));
+		svg_dev_stroke_dataset(ctx, out, colorspace, color);
+	}
 	else
 		fz_append_printf(ctx, out, " fill=\"none\" stroke=\"none\"");
 	if (alpha != 1)
